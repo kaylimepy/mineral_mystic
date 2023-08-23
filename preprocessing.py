@@ -102,7 +102,7 @@ def split_data(images, labels):
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def get_processed_data(directory='mineral_classes'):
+def get_processed_data(directory='temp/mineral_classes'):
     """
     Process the images and labels from the given directory.
 

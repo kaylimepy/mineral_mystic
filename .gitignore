@@ -1,0 +1,18 @@
+# Ignore virtual environment
+env/
+venv/
+env_mineral_mystic/
+
+# Ignore data
+temp/
+
+# Ignore Jupyter Notebook
+*.ipynb
+
+# Ignore compiled Python files
+*.pyc
+*.pyo
+__pycache__/
+
+# Ignore my notes
+my_notes.txt
