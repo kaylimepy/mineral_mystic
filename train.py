@@ -1,95 +1,114 @@
 import torch
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
-from model import CrystalVision
-from preprocessing import get_processed_data
-import numpy
+from mineral_mystic import MineralMystic
+from preprocessing import load_dataset, split_data, create_dataloaders
+import torch.nn
+import torch.optim
 
-def train_model(model, train_loader, val_loader, num_epochs=20, lr=0.001):
-    """
-    Train the CrystalVision model.
+config = {
+    'lr': 0.0001,
+    'epochs': 40,
+}
 
-    Parameters:
-    - model (nn.Module): The neural network model to train.
-    - train_loader, val_loader (DataLoader): Data loaders for training and validation sets.
-    - num_epochs (int): Number of training epochs.
-    - lr (float): Learning rate for the optimizer.
+def save_model(model: torch.nn.Module, optimizer: torch.optim.Optimizer, filename: str):
+    '''Saves the model and optimizer state to a file.'''
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+    }
+    torch.save(checkpoint, filename)
 
-    Returns:
-    - model (nn.Module): Trained neural network model.
-    """
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+def load_model(model: torch.nn.Module, optimizer: torch.optim.Optimizer, filename: str) -> (torch.nn.Module, torch.optim.Optimizer):
+    '''Loads the model and optimizer state from a file.'''
+    checkpoint = torch.load(filename)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model, optimizer
 
-    for epoch in range(num_epochs):
+def print_metrics(epoch: int, epochs: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
+    '''Prints metrics for the current epoch.'''
+    print(f"Epoch {epoch+1}/{epochs}:")
+    print(f"Training Loss: {train_loss:.4f}, Training Accuracy: {train_acc:.2f}%")
+    print(f"Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_acc:.2f}%")
+    print("-----------------------------")
+
+def fit(epochs: int, model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val_loader: torch.utils.data.DataLoader, 
+        loss_criterion: torch.nn.Module, optimizer: torch.optim.Optimizer) -> (list, list, list, list):
+    '''Train the model.'''
+    train_losses, val_losses = [], []
+    train_accuracies, val_accuracies = [], []
+    
+    for epoch in range(epochs):
+        # Training
         model.train()
-        for inputs, labels in train_loader:
+        running_loss = 0.0
+        num_correct_train, total_samples_train = 0, 0
+        
+        for images, labels in train_loader:
             optimizer.zero_grad()
 
-            outputs = model(inputs)
-            loss    = criterion(outputs, labels)
+            outputs = model(images)
+            loss    = loss_criterion(outputs, labels)
 
             loss.backward()
             optimizer.step()
+            running_loss += loss.item()
+            
+            _, predicted_labels = outputs.max(1)
 
-        # Evaluation on the validation set
+            total_samples_train += labels.size(0)
+            num_correct_train += predicted_labels.eq(labels).sum().item()
+
+        train_losses.append(running_loss/len(train_loader))
+        train_accuracy = 100 * num_correct_train / total_samples_train
+        train_accuracies.append(train_accuracy)
+        
+        # Validation
         model.eval()
-        val_loss = 0.0
-        correct = 0
-        total = 0
+        running_val_loss = 0.0
+        correct_val, total_val = 0, 0
+        
         with torch.no_grad():
-            for inputs, labels in val_loader:
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
-                _, predicted = outputs.max(1)
-                total += labels.size(0)
-                correct += predicted.eq(labels).sum().item()
+            for images, labels in val_loader:
+                outputs = model(images)
+                loss    = loss_criterion(outputs, labels)
 
-        avg_loss = val_loss / len(val_loader)
-        accuracy = 100 * correct / total
-        print(f"Epoch [{epoch + 1}/{num_epochs}] - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+                running_val_loss += loss.item()
+                
+                _, predicted_labels = outputs.max(1)
 
-    return model
+                total_val   += labels.size(0)
+                correct_val += predicted_labels.eq(labels).sum().item()
 
-def save_model(model, path='crystal_vision.pth'):
-    """
-    Save the CrystalVision model to a file.
+        val_losses.append(running_val_loss/len(val_loader))
+        val_accuracy = 100 * correct_val / total_val
+        val_accuracies.append(val_accuracy)
+        
+        print_metrics(epoch, epochs, train_losses[-1], val_losses[-1], train_accuracies[-1], val_accuracies[-1])
 
-    Parameters:
-    - model (nn.Module): The neural network model to save.
-    - path (str): Path where the model should be saved.
-    """
-    torch.save(model.state_dict(), path)
+    return train_losses, val_losses, train_accuracies, val_accuracies
 
-def load_model(path='crystal_vision.pth'):
-    """
-    Load the CrystalVision model from a file.
 
-    Parameters:
-    - path (str): Path from where the model should be loaded.
+if __name__ == '__main__':
+    root_folder = 'temp/mineral_classes'
+    dataset     = load_dataset(root_folder)
 
-    Returns:
-    - model (nn.Module): Loaded neural network model.
-    """
-    model = CrystalVision()
-    model.load_state_dict(torch.load(path))
-    return model
+    x_train, x_val, x_test                = split_data(dataset)
+    train_loader, val_loader, test_loader = create_dataloaders(dataset, x_train, x_val, x_test)
 
-if __name__ == "__main__":
-    X_train, X_val, X_test, y_train, y_val, y_test = get_processed_data()
+    model = MineralMystic()
 
-    # Convert the lists to TensorDataset
-    train_data = TensorDataset(torch.tensor(numpy.array(X_train)).float().permute(0, 3, 1, 2) / 255.0, torch.tensor(y_train))
-    val_data   = TensorDataset(torch.tensor(numpy.array(X_val)).float().permute(0, 3, 1, 2) / 255.0, torch.tensor(y_val))
-    test_data  = TensorDataset(torch.tensor(numpy.array(X_test)).float().permute(0, 3, 1, 2) / 255.0, torch.tensor(y_test))
+    loss_criterion = torch.nn.CrossEntropyLoss()  # Renamed to loss_criterion
+    optimizer      = torch.optim.Adam(model.parameters(), lr=config['lr'])
 
-    # DataLoader instantiation
-    train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-    val_loader   = DataLoader(val_data, batch_size=32)
+    # Uncomment the next line if you want to load a pre-trained model
+    # model, optimizer = load_model(model, optimizer, 'cyrstal_vision_model.pth')
+    
+    train_losses, val_losses, train_accuracies, val_accuracies = fit(
+        config['epochs'], model, train_loader, val_loader, loss_criterion, optimizer
+    )
+    
+    # Save the final model
+    save_model(model, optimizer, 'cyrstal_vision_model.pth')
 
-    model         = CrystalVision()
-    trained_model = train_model(model, train_loader, val_loader)
-
-    # Save the trained model
-    save_model(trained_model, 'crystal_vision.pth')
+    print(f"Overall Training Accuracy: {sum(train_accuracies)/len(train_accuracies):.2f}%")
+    print(f"Overall Validation Accuracy: {sum(val_accuracies)/len(val_accuracies):.2f}%")

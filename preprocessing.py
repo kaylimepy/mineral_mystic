@@ -1,125 +1,66 @@
-import os
-import cv2
-import imgaug
-import imgaug.augmenters
-from PIL import Image
+from torchvision.datasets import ImageFolder
+from torchvision import transforms
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from sklearn.model_selection import train_test_split
 
+def load_dataset(root_folder: str) -> ImageFolder:
+    '''Loads the dataset from the given root folder and applies data augmentations.'''
+    data_transformations = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomRotation(30),
+        transforms.RandomVerticalFlip(p=0.5),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    dataset = ImageFolder(root_folder, transform=data_transformations)
 
-def load_and_clean_data(directory):
-    """
-    Load and clean the image data.
+    print('Dataset loaded successfully!')
+    return dataset
 
-    Parameters:
-    - directory (str): Path to the directory containing class subdirectories.
+def split_data(dataset: ImageFolder, train_ratio: float = 0.90, val_ratio: float = 0.05) -> tuple:
+    '''Splits the dataset into training, validation, and testing sets based on the provided ratios.'''
+    # Create a mapping from index to label
+    index_to_label_map = {i: label for i, (_, label) in enumerate(dataset)}
+    
+    # Split data for validation
+    train_indices, val_indices, _, _ = train_test_split(
+        list(index_to_label_map.keys()), list(index_to_label_map.values()), 
+        stratify=list(index_to_label_map.values()), test_size=val_ratio
+    )
+    
+    # Create a new mapping that excludes validation indices
+    index_to_label_map_excluding_val = {idx: label for idx, label in index_to_label_map.items() if idx not in val_indices}
+    
+    # Calculate the test ratio
+    test_ratio = 1 - train_ratio - val_ratio
+    
+    # Split the remaining data into training and test sets
+    train_indices, test_indices, _, _ = train_test_split(
+        list(index_to_label_map_excluding_val.keys()), list(index_to_label_map_excluding_val.values()),
+        stratify=list(index_to_label_map_excluding_val.values()), test_size=test_ratio
+    )
+    
+    print('Data splitting complete!')
+    return train_indices, val_indices, test_indices
 
-    Returns:
-    - Tuple of images and labels.
-    """
-    classes        = [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
-    images, labels = [], []
+def create_dataloaders(dataset: ImageFolder, train_indices: list, val_indices: list, test_indices: list, batch_size: int = 128) -> tuple:
+    '''Creates DataLoader objects for training, validation, and testing.'''
+    train_sampler = SubsetRandomSampler(train_indices)
+    val_sampler   = SubsetRandomSampler(val_indices)
+    test_sampler  = SubsetRandomSampler(test_indices)
 
-    for label, class_name in enumerate(classes):
-        class_path = os.path.join(directory, class_name)
+    train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
+    val_loader   = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
+    test_loader  = DataLoader(dataset, batch_size=batch_size, sampler=test_sampler)
+    
+    print('DataLoaders created successfully!')
+    return train_loader, val_loader, test_loader
 
-        for img_name in os.listdir(class_path):
-            if img_name.endswith(('.jpg', '.jpeg')):
-                img_path = os.path.join(class_path, img_name)
-                try:
-                    img = Image.open(img_path)
-                    img.verify()
+if __name__ == '__main__':
+    root_folder = 'temp/mineral_classes'
+    dataset     = load_dataset(root_folder)
 
-                    img = cv2.imread(img_path)
-                    images.append(img)
-                    labels.append(label)
-
-                except Image.UnidentifiedImageError:
-                    print(f"Corrupted image detected: {img_path}")
-                    os.remove(img_path)
-                except Exception as e:
-                    print(f"An error occurred with {img_path}: {e}")
-
-    return images, labels
-
-
-def resize_images(images, target_size=(128, 128)):
-    """
-    Resize a list of images.
-
-    Parameters:
-    - images (list): List of images to resize.
-    - target_size (tuple): Desired size (width, height).
-
-    Returns:
-    - List of resized images.
-    """
-    return [cv2.resize(img, target_size) for img in images]
-
-
-def augment_images(images):
-    """
-    Apply augmentation to images.
-
-    Parameters:
-    - images (list): List of images to augment.
-
-    Returns:
-    - List of augmented images.
-    """
-    seq = imgaug.augmenters.Sequential([
-            imgaug.augmenters.Fliplr(0.5), 
-            imgaug.augmenters.Crop(percent=(0, 0.1)), 
-            imgaug.augmenters.Sometimes(0.5,
-                imgaug.augmenters.GaussianBlur(sigma=(0, 0.5))
-            ),
-            imgaug.augmenters.LinearContrast((0.75, 1.5)),
-            imgaug.augmenters.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5), 
-            imgaug.augmenters.Multiply((0.8, 1.2), per_channel=0.2),
-            imgaug.augmenters.Affine(
-                scale={'x': (0.8, 1.2), 'y': (0.8, 1.2)},
-                translate_percent={'x': (-0.2, 0.2), 'y': (-0.2, 0.2)}, 
-                rotate=(-25, 25),
-                shear=(-8, 8) 
-            )
-        ], random_order=True)
-
-    return seq(images=images)
-
-
-def split_data(images, labels):
-    """
-    Split data into training, validation, and test sets.
-
-    Parameters:
-    - images (list): Images to split.
-    - labels (list): Corresponding labels.
-
-    Returns:
-    - Tuple of train, validation, and test sets.
-    """
-    X_train, X_temp, y_train, y_temp = train_test_split(images, labels, test_size=0.3, stratify=labels)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, stratify=y_temp)
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-def get_processed_data(directory='temp/mineral_classes'):
-    """
-    Process the images and labels from the given directory.
-
-    Parameters:
-    - directory (str): Path to the directory containing class subdirectories.
-
-    Returns:
-    - Tuple of train, validation, and test sets.
-    """
-    all_images, labels = load_and_clean_data(directory)
-    all_images         = resize_images(all_images)
-    augmented_images   = augment_images(all_images)
-    return split_data(augmented_images, labels)
-
-
-if __name__ == "__main__":
-    X_train, X_val, X_test, y_train, y_val, y_test = get_processed_data()
-
+    train_indices, val_indices, test_indices = split_data(dataset)
+    train_loader, val_loader, test_loader    = create_dataloaders(dataset, train_indices, val_indices, test_indices)
     print('Preprocessing complete!')
-
