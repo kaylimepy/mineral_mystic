@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     model = MineralMystic()
 
-    loss_criterion = torch.nn.CrossEntropyLoss()  # Renamed to loss_criterion
+    loss_criterion = torch.nn.CrossEntropyLoss()
     optimizer      = torch.optim.Adam(model.parameters(), lr=config['lr'])
 
     # Uncomment the next line if you want to load a pre-trained model
