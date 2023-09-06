@@ -1,6 +1,8 @@
 import os
+import logging
 import tensorflow
 import imghdr
+import matplotlib.pyplot
 from pathlib import Path
 from PIL import Image
 
@@ -45,7 +47,7 @@ def remove_invalid_and_corrupted_files(directory, allowed_formats=['.jpg', '.jpe
                 im = Image.open(filepath).convert('RGB')
                 im.save(filepath, 'jpeg')
 
-    print(f"Removed {files_removed} invalid or corrupted files.")
+    logging.info(f"Removed {files_removed} invalid or corrupted files.")
 
 
 def load_datasets(data_path, batch_size, img_size):
@@ -148,9 +150,52 @@ def get_class_weights(train_dataset):
 
 
 def get_datasets(data_path, batch_size, img_size):
+    '''
+    Get train, validation and test datasets.
+
+    Parameters:
+        data_path (str): Path to the data directory
+        batch_size (int): Batch size for loading data
+        img_size (tuple): Image dimensions (width, height)
+
+    Returns:
+        tuple: train_dataset, validation_dataset, test_dataset
+    '''
     train_dataset, validation_dataset = load_datasets(data_path, batch_size, img_size)
     validation_dataset, test_dataset  = split_validation_set(validation_dataset)
     
     train_dataset = apply_data_augmentation(train_dataset)
 
     return train_dataset, validation_dataset, test_dataset
+
+
+def plot_training_history(history, model_name, metric='accuracy', directory_path='/mnt/data'):
+    '''
+    Plots the training history of a model and saves the plot to a file.
+
+    Parameters:
+        history (History object): The training history as returned by model.fit().
+        model_name (str): The name of the model, used for the plot title and filename.
+        metric (str): The metric to plot. Default is 'accuracy'.
+        save_path (str): The directory where to save the plot. Default is '/mnt/data'.
+        
+    Returns:
+        str: The path where the plot is saved.
+    '''
+    matplotlib.pyplot.figure(figsize=(10, 6))
+    
+    matplotlib.pyplot.plot(history.history[metric], label=f"Training {metric.capitalize()}")
+    validation_metric = 'val_' + metric
+
+    if validation_metric in history.history:
+        matplotlib.pyplot.plot(history.history[validation_metric], label=f"Validation {metric.capitalize()}")
+
+    matplotlib.pyplot.title(f"{model_name} {metric.capitalize()} Over Epochs")
+    matplotlib.pyplot.xlabel('Epoch')
+    matplotlib.pyplot.ylabel(metric.capitalize())
+    matplotlib.pyplot.legend()
+    
+    plot_file_path = f"{directory_path}/{model_name}_{metric}_plot.png"
+    matplotlib.pyplot.savefig(plot_file_path)
+    
+    return plot_file_path
