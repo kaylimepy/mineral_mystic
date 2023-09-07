@@ -16,3 +16,6 @@ __pycache__/
 
 # Ignore my notes
 my_notes.txt
+
+# Ignore models 
+models/*.h5
