@@ -1,5 +1,5 @@
 from crystal_vision import CrystalVision
-from utils.data_processing import remove_invalid_and_corrupted_files, get_datasets, get_class_weights
+from utils.data_processing import remove_invalid_and_corrupted_files, get_datasets, get_class_weights, plot_training_history
 from utils.logging import logger
 
 DATA_PATH  = 'temp/minet2'
@@ -53,6 +53,12 @@ def run_training_sequence():
 
     logger.info(f"Validation accuracy: {round(validation_accuracy * 100, 2)}%")
     logger.info(f"Validation loss: {round(validation_loss, 2)}")
+
+    loss_plot_path = plot_training_history(history_fine_tuned, 'crystal_vision_model', metric='loss')
+    logger.info(f"Loss validation plot stored in {loss_plot_path}")
+
+    accuracy_plot_path = plot_training_history(history_fine_tuned, 'crystal_vision_model')
+    logger.info(f"Accuracy validation plot stored in {accuracy_plot_path}")
 
 
 if __name__ == "__main__":

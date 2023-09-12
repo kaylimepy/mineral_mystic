@@ -169,7 +169,7 @@ def get_datasets(data_path, batch_size, img_size):
     return train_dataset, validation_dataset, test_dataset
 
 
-def plot_training_history(history, model_name, metric='accuracy', directory_path='/mnt/data'):
+def plot_training_history(history, model_name, metric='accuracy', directory_path='plots'):
     '''
     Plots the training history of a model and saves the plot to a file.
 
@@ -177,7 +177,7 @@ def plot_training_history(history, model_name, metric='accuracy', directory_path
         history (History object): The training history as returned by model.fit().
         model_name (str): The name of the model, used for the plot title and filename.
         metric (str): The metric to plot. Default is 'accuracy'.
-        save_path (str): The directory where to save the plot. Default is '/mnt/data'.
+        save_path (str): The directory where to save the plot. Default is 'plots'.
         
     Returns:
         str: The path where the plot is saved.
@@ -199,3 +199,4 @@ def plot_training_history(history, model_name, metric='accuracy', directory_path
     matplotlib.pyplot.savefig(plot_file_path)
     
     return plot_file_path
+
